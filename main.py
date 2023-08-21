@@ -49,7 +49,7 @@ print(f"Total batches in test_loader: {len(test_loader)}")
 
 device = 'cuda'
 
-model = unet.UNet3D(in_channels=1, out_classes=2, dimensions=3, padding=1)
+model = unet.UNet3D(in_channels=1, out_classes=1, dimensions=3, padding=1)
 model = model.to(device)
 
 learning_rate = 0.001
@@ -69,12 +69,14 @@ for epoch in range(num_epochs):
             sample['SEG'].to(device), sample['SUV'].to(device)
 
         batch_start_time = time.time()
-
+        print('regular', pet.shape)
+        print('float', pet.float().shape)
         # forward pass
-        outputs = model(pet.float())
-        loss = loss_function(outputs[:, 0:1, :, :, :], seg)
-
         optimizer.zero_grad()
+        outputs = model(pet.float())
+        print('out', outputs.shape)
+        loss = loss_function(outputs, seg)
+
         loss.backward()
         optimizer.step()
 
