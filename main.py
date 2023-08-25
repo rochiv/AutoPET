@@ -1,6 +1,8 @@
 import os
 import time
 import pandas as pd
+import matplotlib.pyplot as plt
+import torch
 
 from dataset import SegmentationDataset, generate_image_df
 
@@ -32,15 +34,15 @@ else:
 train_df, test_df = train_test_split(image_df, test_size=0.2, random_state=42)
 
 # develop transform
-resize_transform = torchvision.transforms.Compose([tio.transforms.Resize(64), torchvision.transforms.Normalize(0.5, 0.5)])
+resize_transform = torchvision.transforms.Compose([tio.transforms.Resize(64)])
 
 # create train set
 train_set = SegmentationDataset(df=train_df, root_dir=data_dir_path, transform=resize_transform)
 test_set = SegmentationDataset(df=test_df, root_dir=data_dir_path, transform=resize_transform)
 
 # create data loaders
-train_loader = DataLoader(train_set, batch_size=1, shuffle=True, num_workers=2)
-test_loader = DataLoader(test_set, batch_size=1, shuffle=False, num_workers=2)
+train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=2)
+test_loader = DataLoader(test_set, batch_size=4, shuffle=False, num_workers=2)
 
 print(f"Total batches in train_loader: {len(train_loader)}")
 print(f"Total batches in test_loader: {len(test_loader)}")
@@ -52,7 +54,7 @@ device = 'cuda'
 model = unet.UNet3D(in_channels=1, out_classes=1, dimensions=3, padding=1)
 model = model.to(device)
 
-learning_rate = 0.001
+learning_rate = 0.0001
 
 loss_function = DiceLoss(sigmoid=True)
 
@@ -69,12 +71,10 @@ for epoch in range(num_epochs):
             sample['SEG'].to(device), sample['SUV'].to(device)
 
         batch_start_time = time.time()
-        print('regular', pet.shape)
-        print('float', pet.float().shape)
+
         # forward pass
         optimizer.zero_grad()
         outputs = model(pet.float())
-        print('out', outputs.shape)
         loss = loss_function(outputs, seg)
 
         loss.backward()
@@ -89,3 +89,5 @@ for epoch in range(num_epochs):
     epoch_time = epoch_end_time - epoch_start_time
 
     print(f"Epoch [{epoch + 1}/{num_epochs}] - Total Time: {epoch_time:.2f} seconds")
+
+torch.save(model.state_dict(), f="model")
