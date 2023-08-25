@@ -56,10 +56,14 @@ model = model.to(device)
 
 learning_rate = 0.0001
 
-loss_function = DiceLoss(sigmoid=True)
+dice_loss_function = DiceLoss(sigmoid=True)
+gen_dice_loss_function = GeneralizedDiceLoss(sigmoid=True)
+masked_dice_loss_function = MaskedDiceLoss(sigmoid=True)
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-num_epochs = 20
+num_epochs = 1
+
+training_start_time = time.time()
 
 for epoch in range(num_epochs):
     print(f"Epoch [{epoch + 1}/{num_epochs}]")
@@ -75,19 +79,29 @@ for epoch in range(num_epochs):
         # forward pass
         optimizer.zero_grad()
         outputs = model(pet.float())
-        loss = loss_function(outputs, seg)
 
+        dice_loss = dice_loss_function(outputs, seg)
+        gen_dice_loss = gen_dice_loss_function(outputs, seg)
+        masked_dice_loss = masked_dice_loss_function(outputs, seg, seg)  # TODO: Understand how MaskedDiceLoss works and what the third argument should be
+
+        loss = (dice_loss + gen_dice_loss + masked_dice_loss) / 3
         loss.backward()
+
         optimizer.step()
 
         batch_end_time = time.time()
         batch_time = batch_end_time - batch_start_time
 
-        print(f"  Batch [{batch_idx + 1}/{len(train_loader)}] - Loss: {loss:.4f} - Batch Time: {batch_time:.2f} seconds")
+        print(f"        Batch [{batch_idx + 1}/{len(train_loader)}] - Loss - {loss:.4f} - Dice: {dice_loss:.4f} - Gen. Dice: {gen_dice_loss:.4f} - Masked Dice: {masked_dice_loss: .4f}  - Batch Time: {batch_time:.2f} seconds")
 
     epoch_end_time = time.time()
     epoch_time = epoch_end_time - epoch_start_time
 
-    print(f"Epoch [{epoch + 1}/{num_epochs}] - Total Time: {epoch_time:.2f} seconds")
+    print(f"    Epoch [{epoch + 1}/{num_epochs}] - Total Time: {epoch_time:.2f} seconds")
 
-torch.save(model.state_dict(), f="model")
+training_end_time = time.time()
+training_time = training_end_time - training_start_time
+
+print(f"Training time: {training_time:.2f} seconds")
+
+torch.save(model.state_dict(), f="model.pt")
