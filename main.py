@@ -13,6 +13,7 @@ import torchio as tio
 from torch.utils.data import DataLoader
 import unet
 import torch.optim as optim
+from torch.nn.parallel import DistributedDataParallel as DDP
 from monai.losses import DiceLoss, GeneralizedDiceLoss, MaskedDiceLoss
 
 # Enter path to .csv file
@@ -34,7 +35,7 @@ else:
 train_df, test_df = train_test_split(image_df, test_size=0.2, random_state=42)
 
 # develop transform
-resize_transform = torchvision.transforms.Compose([tio.transforms.Resize(64)])
+resize_transform = torchvision.transforms.Compose([tio.transforms.Resize(64), tio.transforms.RandomFlip(), tio.transforms.RandomGamma()])
 
 # create train set
 train_set = SegmentationDataset(df=train_df, root_dir=data_dir_path, transform=resize_transform)
@@ -53,12 +54,13 @@ device = 'cuda'
 
 model = unet.UNet3D(in_channels=1, out_classes=1, dimensions=3, padding=1)
 model = model.to(device)
+# ddp_model = DDP(model, device_ids=[torch.cuda.device_count()])      # FIXME: default proc group has not been initialized, call init_process_group
 
-learning_rate = 0.0001
+learning_rate = 0.01
 
-dice_loss_function = DiceLoss(sigmoid=True)
-gen_dice_loss_function = GeneralizedDiceLoss(sigmoid=True)
-masked_dice_loss_function = MaskedDiceLoss(sigmoid=True)
+dice_loss_function = DiceLoss()
+gen_dice_loss_function = GeneralizedDiceLoss()
+masked_dice_loss_function = MaskedDiceLoss()
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 num_epochs = 1
@@ -78,13 +80,13 @@ for epoch in range(num_epochs):
 
         # forward pass
         optimizer.zero_grad()
-        outputs = model(pet.float())
+        outputs = model(pet.float())    # TODO: add other data as channels
 
         dice_loss = dice_loss_function(outputs, seg)
         gen_dice_loss = gen_dice_loss_function(outputs, seg)
         masked_dice_loss = masked_dice_loss_function(outputs, seg, seg)  # TODO: Understand how MaskedDiceLoss works and what the third argument should be
 
-        loss = (dice_loss + gen_dice_loss + masked_dice_loss) / 3
+        loss = (dice_loss + gen_dice_loss + masked_dice_loss)
         loss.backward()
 
         optimizer.step()
@@ -104,4 +106,4 @@ training_time = training_end_time - training_start_time
 
 print(f"Training time: {training_time:.2f} seconds")
 
-torch.save(model.state_dict(), f="model.pt")
+torch.save(model.state_dict(), f="model2.pt")
