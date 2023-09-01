@@ -13,6 +13,7 @@ import torchio as tio
 from torch.utils.data import DataLoader
 import unet
 import torch.optim as optim
+import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from monai.losses import DiceLoss, GeneralizedDiceLoss, MaskedDiceLoss
 
@@ -35,7 +36,12 @@ else:
 train_df, test_df = train_test_split(image_df, test_size=0.2, random_state=42)
 
 # develop transform
-resize_transform = torchvision.transforms.Compose([tio.transforms.Resize(64), tio.transforms.RandomFlip(), tio.transforms.RandomGamma()])
+resize_transform = torchvision.transforms.Compose([
+    tio.transforms.Resize(100, image_interpolation="linear"),
+    tio.transforms.RandomFlip(),
+    tio.transforms.RandomBlur(),
+    tio.transforms.ZNormalization(),        # FIXME: ZNormalization() transform results in an error
+])
 
 # create train set
 train_set = SegmentationDataset(df=train_df, root_dir=data_dir_path, transform=resize_transform)
@@ -50,20 +56,21 @@ print(f"Total batches in test_loader: {len(test_loader)}")
 
 # ---------------------------------------------------------------------------------------------------------
 
+
 device = 'cuda'
 
-model = unet.UNet3D(in_channels=1, out_classes=1, dimensions=3, padding=1)
+model = unet.UNet3D(in_channels=2, out_classes=1, dimensions=3, padding=1)
 model = model.to(device)
 # ddp_model = DDP(model, device_ids=[torch.cuda.device_count()])      # FIXME: default proc group has not been initialized, call init_process_group
 
-learning_rate = 0.01
+learning_rate = 0.001
 
-dice_loss_function = DiceLoss()
+dice_loss_function = DiceLoss(sigmoid=True)
 gen_dice_loss_function = GeneralizedDiceLoss()
 masked_dice_loss_function = MaskedDiceLoss()
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-num_epochs = 1
+num_epochs = 10
 
 training_start_time = time.time()
 
@@ -76,28 +83,31 @@ for epoch in range(num_epochs):
         ct, ctres, pet, seg, suv = sample['CT'].to(device), sample['CTres'].to(device), sample['PET'].to(device), \
             sample['SEG'].to(device), sample['SUV'].to(device)
 
+        pet_suv = torch.cat((pet, suv), 1)
+
         batch_start_time = time.time()
 
         # forward pass
         optimizer.zero_grad()
-        outputs = model(pet.float())    # TODO: add other data as channels
+        outputs = model(pet_suv.float())  # TODO: add other data as channels
 
         dice_loss = dice_loss_function(outputs, seg)
-        gen_dice_loss = gen_dice_loss_function(outputs, seg)
-        masked_dice_loss = masked_dice_loss_function(outputs, seg, seg)  # TODO: Understand how MaskedDiceLoss works and what the third argument should be
 
-        loss = (dice_loss + gen_dice_loss + masked_dice_loss)
-        loss.backward()
+        dice_loss.backward()
 
         optimizer.step()
 
         batch_end_time = time.time()
         batch_time = batch_end_time - batch_start_time
 
-        print(f"        Batch [{batch_idx + 1}/{len(train_loader)}] - Loss - {loss:.4f} - Dice: {dice_loss:.4f} - Gen. Dice: {gen_dice_loss:.4f} - Masked Dice: {masked_dice_loss: .4f}  - Batch Time: {batch_time:.2f} seconds")
+        print(f"        Batch [{batch_idx + 1}/{len(train_loader)}] - Dice: {dice_loss:.4f} - Batch Time: {batch_time:.2f} seconds")
 
     epoch_end_time = time.time()
     epoch_time = epoch_end_time - epoch_start_time
+
+    if epoch % 5 == 0:
+        torch.save(model.state_dict(), f=f"model3_epoch{epoch + 1 // 5}.pt")
+        print(f"Model saved at epoch #{epoch}")
 
     print(f"    Epoch [{epoch + 1}/{num_epochs}] - Total Time: {epoch_time:.2f} seconds")
 

@@ -30,7 +30,7 @@ class SegmentationDataset(Dataset):
         for key, value in images_dict.items():
             image = nib.load(os.path.join(self.root_dir, value))
             image_data = image.get_fdata()
-            image_tensor = torch.tensor(image_data).unsqueeze(0)
+            image_tensor = torch.tensor(image_data).unsqueeze(0)        # adding channel
 
             # apply transform
             if self.transform:
