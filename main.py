@@ -1,7 +1,6 @@
 import os
 import time
 import pandas as pd
-import matplotlib.pyplot as plt
 import torch
 
 from dataset import SegmentationDataset, generate_image_df
@@ -13,9 +12,7 @@ import torchio as tio
 from torch.utils.data import DataLoader
 import unet
 import torch.optim as optim
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-from monai.losses import DiceLoss, GeneralizedDiceLoss, MaskedDiceLoss
+from monai.losses import DiceLoss
 
 # Enter path to .csv file
 csv_path = "image_df.csv"

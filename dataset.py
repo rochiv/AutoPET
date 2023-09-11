@@ -1,15 +1,8 @@
 import os
-
-import matplotlib.pyplot as plt
 import pandas as pd
-
-import nibabel as nib
-import PIL
-
+import SimpleITK as sitk
 import torch
-import torchio as tio
-import torchvision
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 
 class SegmentationDataset(Dataset):
@@ -28,9 +21,9 @@ class SegmentationDataset(Dataset):
 
         # convert .nii.gz to tensor
         for key, value in images_dict.items():
-            image = nib.load(os.path.join(self.root_dir, value))
-            image_data = image.get_fdata()
-            image_tensor = torch.tensor(image_data).unsqueeze(0)        # adding channel
+            image_path = os.path.join(self.root_dir, value)
+            image_data = sitk.GetArrayFromImage(sitk.ReadImage(image_path))
+            image_tensor = torch.tensor(image_data).unsqueeze(0)  # adding channel
 
             # apply transform
             if self.transform:
@@ -41,31 +34,18 @@ class SegmentationDataset(Dataset):
         return images_dict
 
 
-def display_2d_image_mask(image, mask) -> None:
-    f, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
-
-    ax1.set_title("Image")
-    ax1.imshow(image)
-
-    ax2.set_title("Mask")
-    ax2.imshow(mask)
-
-
 def generate_image_df(data_dir: str) -> pd.DataFrame:
     df = pd.DataFrame(columns=['CT', 'CTres', 'PET', 'SUV', 'SEG'])
 
     patients = os.listdir(data_dir)
-    # print(f"patients length = {patients}")
 
     for patient in patients:
         patient_path = os.path.join(data_dir, patient)
         studies = os.listdir(patient_path)
-        # print(f"studies length = {studies}")
 
         for study in studies:
             study_path = os.path.join(patient_path, study)
             files = os.listdir(study_path)
-            # print(f"files length = {files}")
 
             file_path_dict = {'CT': [], 'CTres': [], 'PET': [], 'SUV': [], 'SEG': []}
 
