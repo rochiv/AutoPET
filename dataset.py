@@ -7,10 +7,12 @@ from torch.utils.data import Dataset
 
 class SegmentationDataset(Dataset):
 
-    def __init__(self, df, root_dir, transform=None):
+    def __init__(self, df, root_dir, transform_pet, transform_suv, transform_seg):
         self.root_dir = root_dir
         self.image_df = df
-        self.transform = transform
+        self.transform_pet = transform_pet
+        self.transform_suv = transform_suv
+        self.transform_seg = transform_seg
 
     def __len__(self):
         return len(self.image_df)
@@ -19,19 +21,19 @@ class SegmentationDataset(Dataset):
         row = self.image_df.iloc[idx]
         images_dict = dict(row)
 
-        # convert .nii.gz to tensor
-        for key, value in images_dict.items():
-            image_path = os.path.join(self.root_dir, value)
-            image_data = sitk.GetArrayFromImage(sitk.ReadImage(image_path))
-            image_tensor = torch.tensor(image_data).unsqueeze(0)  # adding channel
+        pet = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(self.root_dir, images_dict['PET'])))
+        suv = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(self.root_dir, images_dict['SUV'])))
+        seg = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(self.root_dir, images_dict['SEG'])))
 
-            # apply transform
-            if self.transform:
-                images_dict[key] = self.transform(image_tensor)
-            else:
-                images_dict[key] = image_tensor
+        pet_tensor = torch.tensor(pet).unsqueeze(0)
+        suv_tensor = torch.tensor(suv).unsqueeze(0)
+        seg_tensor = torch.tensor(seg).unsqueeze(0)
 
-        return images_dict
+        pet_transform = self.transform_pet(pet_tensor)
+        suv_transform = self.transform_suv(suv_tensor)
+        seg_transform = self.transform_seg(seg_tensor)
+
+        return pet_transform.float(), suv_transform.float(), seg_transform.float()
 
 
 def generate_image_df(data_dir: str) -> pd.DataFrame:

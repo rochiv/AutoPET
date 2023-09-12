@@ -2,7 +2,7 @@ import os
 import time
 import pandas as pd
 import torch
-
+from tqdm import tqdm
 from dataset import SegmentationDataset, generate_image_df
 
 from sklearn.model_selection import train_test_split
@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 import unet
 import torch.optim as optim
 from monai.losses import DiceLoss
+from torch.nn import BCEWithLogitsLoss
 
 # Enter path to .csv file
 csv_path = "image_df.csv"
@@ -33,52 +34,67 @@ else:
 train_df, test_df = train_test_split(image_df, test_size=0.2, random_state=42)
 
 # develop transform
-resize_transform = torchvision.transforms.Compose([
-    tio.transforms.Resize(100, image_interpolation="linear"),
-    tio.transforms.RandomFlip(),
-    tio.transforms.RandomBlur(),
-    tio.transforms.ZNormalization(),        # FIXME: ZNormalization() transform results in an error
+resize_transform_pet = torchvision.transforms.Compose([
+    tio.transforms.Resize(64, image_interpolation="linear"),
+    tio.transforms.ZNormalization(),
+])
+
+resize_transform_suv = torchvision.transforms.Compose([
+    tio.transforms.Resize(64, image_interpolation="linear"),
+    tio.transforms.ZNormalization(),
+])
+
+resize_transform_seg = torchvision.transforms.Compose([
+    tio.transforms.Resize(64, image_interpolation="nearest"),
 ])
 
 # create train set
-train_set = SegmentationDataset(df=train_df, root_dir=data_dir_path, transform=resize_transform)
-test_set = SegmentationDataset(df=test_df, root_dir=data_dir_path, transform=resize_transform)
+train_set = SegmentationDataset(df=train_df,
+                                root_dir=data_dir_path,
+                                transform_pet=resize_transform_pet,
+                                transform_suv=resize_transform_suv,
+                                transform_seg=resize_transform_seg
+                                )
+
+test_set = SegmentationDataset(df=test_df,
+                               root_dir=data_dir_path,
+                               transform_pet=resize_transform_pet,
+                               transform_suv=resize_transform_suv,
+                               transform_seg=resize_transform_seg
+                               )
 
 # create data loaders
-train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=2)
-test_loader = DataLoader(test_set, batch_size=4, shuffle=False, num_workers=2)
+train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4)
+test_loader = DataLoader(test_set, batch_size=4, shuffle=False, num_workers=4)
 
 print(f"Total batches in train_loader: {len(train_loader)}")
 print(f"Total batches in test_loader: {len(test_loader)}")
 
-# ---------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 
+# TODO: create main function
+# TODO: create separate functions for transform, dataloader
 
 device = 'cuda'
 
 model = unet.UNet3D(in_channels=2, out_classes=1, dimensions=3, padding=1)
 model = model.to(device)
-# ddp_model = DDP(model, device_ids=[torch.cuda.device_count()])      # FIXME: default proc group has not been initialized, call init_process_group
 
 learning_rate = 0.001
 
 dice_loss_function = DiceLoss(sigmoid=True)
-gen_dice_loss_function = GeneralizedDiceLoss()
-masked_dice_loss_function = MaskedDiceLoss()
+
+bce_loss_function = BCEWithLogitsLoss()
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 num_epochs = 10
 
-training_start_time = time.time()
-
 for epoch in range(num_epochs):
     print(f"Epoch [{epoch + 1}/{num_epochs}]")
 
-    epoch_start_time = time.time()
-
-    for batch_idx, sample in enumerate(train_loader):
-        ct, ctres, pet, seg, suv = sample['CT'].to(device), sample['CTres'].to(device), sample['PET'].to(device), \
-            sample['SEG'].to(device), sample['SUV'].to(device)
+    enu_tqdm = tqdm(enumerate(train_loader))
+    for batch_idx, sample in enu_tqdm:
+        pet, suv, seg = sample[0].to(device), sample[1].to(device), sample[2].to(device)
 
         pet_suv = torch.cat((pet, suv), 1)
 
@@ -86,31 +102,14 @@ for epoch in range(num_epochs):
 
         # forward pass
         optimizer.zero_grad()
-        outputs = model(pet_suv.float())  # TODO: add other data as channels
+        outputs = model(pet_suv.float())
 
-        dice_loss = dice_loss_function(outputs, seg)
-
-        dice_loss.backward()
+        bce_loss = bce_loss_function(outputs, seg)
+        bce_loss.backward()
 
         optimizer.step()
 
-        batch_end_time = time.time()
-        batch_time = batch_end_time - batch_start_time
+        enu_tqdm.set_description(
+            f"Batch [{batch_idx + 1}/{len(train_loader)}] - BCE: {bce_loss:.4f}")
 
-        print(f"        Batch [{batch_idx + 1}/{len(train_loader)}] - Dice: {dice_loss:.4f} - Batch Time: {batch_time:.2f} seconds")
-
-    epoch_end_time = time.time()
-    epoch_time = epoch_end_time - epoch_start_time
-
-    if epoch % 5 == 0:
-        torch.save(model.state_dict(), f=f"model3_epoch{epoch + 1 // 5}.pt")
-        print(f"Model saved at epoch #{epoch}")
-
-    print(f"    Epoch [{epoch + 1}/{num_epochs}] - Total Time: {epoch_time:.2f} seconds")
-
-training_end_time = time.time()
-training_time = training_end_time - training_start_time
-
-print(f"Training time: {training_time:.2f} seconds")
-
-torch.save(model.state_dict(), f="model2.pt")
+torch.save(model.state_dict(), f="model3.pt")
