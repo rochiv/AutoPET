@@ -15,6 +15,8 @@ import torch.optim as optim
 from monai.losses import DiceLoss
 from torch.nn import BCEWithLogitsLoss
 
+from val_script import compute_metrics, dice_score
+
 # Enter path to .csv file
 csv_path = "image_df.csv"
 
@@ -82,8 +84,6 @@ model = model.to(device)
 
 learning_rate = 0.001
 
-dice_loss_function = DiceLoss(sigmoid=True)
-
 bce_loss_function = BCEWithLogitsLoss()
 
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
@@ -109,7 +109,32 @@ for epoch in range(num_epochs):
 
         optimizer.step()
 
-        enu_tqdm.set_description(
-            f"Batch [{batch_idx + 1}/{len(train_loader)}] - BCE: {bce_loss:.4f}")
+        enu_tqdm.set_description(f"Batch [{batch_idx + 1}/{len(train_loader)}] - BCE: {bce_loss:.4f}")
 
-torch.save(model.state_dict(), f="model3.pt")
+    # validation
+    model.eval()
+    val_loss = 0.0
+    val_batches = len(test_loader)
+
+    with torch.no_grad():
+        val_tqdm = tqdm(enumerate(test_loader))
+        for batch_idx, sample in val_tqdm:
+            pet, suv, seg = sample[0].to(device), sample[1].to(device), sample[2].to(device)
+            pet_suv = torch.cat((pet, suv), 1)
+
+            # Forward pass
+            outputs = model(pet_suv.float())
+
+            outputs = torch.where(outputs > 0.5, 1., 0.)
+
+            # Calculate loss
+            dice_sc = dice_score(seg, outputs)
+            val_loss += dice_sc.item()
+
+            # Update progress bar
+            tqdm.write(f"Val Batch [{batch_idx + 1}/{len(test_loader)}] - Dice Score: {dice_sc:.4f}")
+
+    avg_val_loss = val_loss / val_batches
+    print(f"Avg Validation Loss: {avg_val_loss:.4f}")
+
+torch.save(model.state_dict(), f="model4.pt")

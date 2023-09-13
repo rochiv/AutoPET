@@ -1,0 +1,320 @@
+import unet
+model = unet.UNet3D()
+exit
+from monai.losses import DiceLoss
+DiceLoss
+resize_transform = torchvision.transforms.Compose([tio.transforms.Resize(64), torchvision.transforms.Normalize(0.5, 0.5)])
+
+pet_img = df[0]['PET']
+df.head() 
+sample_row = df[42]
+sample_row = df.iloc(42)
+sample_row = df.iloc[42]
+sample_row['PET']
+pet, ct, ctres, suv, seg = sample_row['PET'], sample_row['CT'], sample_row['CTres'], sample_row['SUV'], sample_row['SEG']
+import torchvision 
+import os
+import time
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from dataset import SegmentationDataset, generate_image_df
+
+from sklearn.model_selection import train_test_split
+
+import torchvision
+import torchio as tio
+from torch.utils.data import DataLoader
+import unet
+import torch.optim as optim
+from monai.losses import DiceLoss, GeneralizedDiceLoss, MaskedDiceLoss
+# Enter path to .csv file
+csv_path = "image_df.csv"
+
+# Enter path to image data directory
+data_dir_path = "/home/rohit/Downloads/nifti/FDG-PET-CT-Lesions"
+
+# Generate image_df.csv if it does not exist
+if os.path.exists(csv_path):
+    print(f".csv path exists, reading {csv_path}.")
+    image_df = pd.read_csv(csv_path)
+else:
+    print(f".csv path does not exist, generating dataframe and creating {csv_path} file.")
+    image_df = generate_image_df(data_dir_path)
+    image_df.to_csv(csv_path, index=False)
+
+# generate train-test split
+train_df, test_df = train_test_split(image_df, test_size=0.2, random_state=42)
+
+# develop transform
+resize_transform = torchvision.transforms.Compose([tio.transforms.Resize(64)])
+
+# create train set
+train_set = SegmentationDataset(df=train_df, root_dir=data_dir_path, transform=resize_transform)
+test_set = SegmentationDataset(df=test_df, root_dir=data_dir_path, transform=resize_transform)
+
+# create data loaders
+train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=2)
+test_loader = DataLoader(test_set, batch_size=4, shuffle=False, num_workers=2)
+
+print(f"Total batches in train_loader: {len(train_loader)}")
+print(f"Total batches in test_loader: {len(test_loader)}")
+
+train_df.size
+len(train_df)
+train_df.shape
+type(train_df)
+train_df.iloc[0]
+sample_row = train_df[42]
+sample_row = train_df.iloc[42]
+sample_row = list(sample_row)
+sample_row.shape
+len(sample_row)
+sample_row
+import SimpleITK as sith 
+import SimpleITK as sitk
+ct, ctres, pet, suv, seg = sample_row
+ct
+ctres
+pet
+suv
+seg
+img1 = sitk.ReadImage(pet)
+csv_path
+img1 = sitk.ReadImage(os.path.join(data_dir_path, pet))
+img1
+sitk.Show(img1, title="PET")
+pip instsall platipy 
+import platipy 
+from platipy.imaging import ImageVisualiser
+data_dir_path = "/home/rohit/Downloads/nifti/FDG-PET-CT-Lesions"
+
+csv_path = "image_df.csv"
+import pandas as pf 
+img_df = pd.read_csv(csv_path)
+sample_row_paths = img_df.iloc[42]
+sample_row_complete_paths = [os.path.join(data_dir_path, img) for img in sample_row_paths]
+sample_row_complete_paths
+ct, ctres, pet, suv, seg = sample_row_complete_paths
+pet_img = sitk.ReadImage(pet)
+seg_img = sitk.ReadImage(seg)
+vis = ImageVisualiser(pet_img, axis="z")
+import matplotlib.pyplot as plt 
+vis = ImageVisualiser(pet_img, axis="y")
+vis.add_scalar_overlay(seg_img)
+vis.show()
+vis = ImageVisualiser(pet_img, axis="z", cut=77, figure_size_in=6)
+vis.add_scalar_overlay(labelmap, colormap=plt.cm.jet, discrete_levels=3, show_colorbar=False)
+vis.show()
+vis = ImageVisualiser(pet_img, axis="z", cut=77, figure_size_in=6)
+vis.add_scalar_overlay(seg_img, colormap=plt.cm.jet, discrete_levels=3, show_colorbar=False)
+vis.show()
+plt.plot
+plt.plot()
+plt.show()
+vis = ImageVisualiser(pet_img, axis="y", cut=77, figure_size_in=6)
+vis.add_scalar_overlay(seg_img, colormap=plt.cm.jet, discrete_levels=3, show_colorbar=False)
+vis.show()
+vis = ImageVisualiser(pet_img, axis="y", cut=77, figure_size_in=6)
+vis.add_scalar_overlay(seg_img, colormap=plt.cm.jet, discrete_levels=3, show_colorbar=False)
+vis.show() ; plt.show()
+vis = ImageVisualiser(pet_img, axis="y", figure_size_in=6)
+vis.add_scalar_overlay(seg_img, colormap=plt.cm.jet, discrete_levels=3, show_colorbar=False)
+vis.show() ; plt.show()
+torch.cuda.is_available()
+torch.cuda.device()
+torch.cuda.device_count()
+model = torch.load("model.pt")
+type(model)
+model
+model.shape
+model.temp
+model.items()
+model.keys()
+clear
+df.head()
+import nibabel as nib 
+import os 
+img1 = nib.load(os.path.join(data_dir_path, df.iloc[0]))
+df.iloc[0]
+df.iloc[0]['PET']
+img1 = nib.load(os.path.join(data_dir_path, df.iloc[0]['PET']))
+type(img1)
+img1_np = img1.get_fdata()
+type(img1_np)
+import simpleITK 
+imgsitk = sitk.GetArrayFromImage(sitk.ReadImage(os.path.join(data_dir_path, df.iloc[0]['PET'])))
+type(imgsitk)
+napari.imshow(imgsitk)
+napari.imshow(imgsitk, channel_axis=1)
+import SimpleITK as sitk 
+import pandas as pd 
+df = pd.read_csv("image_df.csv")
+data_dir_path = "/home/rohit/Downloads/nifti/FDG-PET-CT-Lesions"
+import os
+import time
+import pandas as pd
+import torch
+
+from dataset import SegmentationDataset, generate_image_df
+
+from sklearn.model_selection import train_test_split
+
+import torchvision
+import torchio as tio
+from torch.utils.data import DataLoader
+import unet
+import torch.optim as optim
+from monai.losses import DiceLoss, GeneralizedDiceLoss, MaskedDiceLoss
+import os
+import pandas as pd
+import SimpleITK as sitk
+import torch
+from torch.utils.data import Dataset
+# Enter path to .csv file
+csv_path = "image_df.csv"
+
+# Enter path to image data directory
+data_dir_path = "/home/rohit/Downloads/nifti/FDG-PET-CT-Lesions"
+# Generate image_df.csv if it does not exist
+if os.path.exists(csv_path):
+    print(f".csv path exists, reading {csv_path}.")
+    image_df = pd.read_csv(csv_path)
+else:
+    print(f".csv path does not exist, generating dataframe and creating {csv_path} file.")
+    image_df = generate_image_df(data_dir_path)
+    image_df.to_csv(csv_path, index=False)
+    
+image_df.head
+image_df.iloc[0]
+sub1 = image_df.iloc[0]
+type(sub1)
+for i in sub1: 
+    print(i)
+    
+sub1['PET']
+for key, value in enumerate(sub1): 
+    print(f"key: {key} value {value}")
+    
+sub1.to_dict()
+sub1dict = sub1.to_dict
+sub1dict = sub1.to_dict()
+sub1dict
+for key, value in enumerate(sub1dict): 
+    print(f"key: {key} value {value}")
+    
+for key, value in sub1dict.items(): 
+    print(f"key: {key} value {value}")
+    
+for key, value in sub1dict.items(): 
+    path = os.path.join(data_dir_path, value)
+    image = sitk.GetArrayFromImage(sitk.ReadImage(path))
+    sub1dict[key] = image 
+    
+sub1dict['PET'].size
+sub1dict['PET'].shape
+type(sub1dict['PET'])
+napari.imshow(sub1dict['PET'])
+napari.imshow(sub1dict['CTres'])
+import numpy as np 
+pet_seg_stack = np.stack([sub1dict['PET'], sub1dict['SEG']], axis=0)
+pet_seg_stack = np.stack([sub1dict['PET'], sub1dict['SEG']], axis=-1)
+pet_seg_stack.shape
+napari.imshow(pet_seg_stack)
+napari.imshow(sub1dict["PET"])
+napari.imshow(sub1dict["SUV"])
+napari.imshow(sub1dict["PET"] * sub1dict["SEG"])
+sub1dict["SEG"]
+for i in sub1dict: 
+    for j in i: 
+        for k in j: 
+            if k == 1: 
+                print("cancer break")
+                
+for i in sub1dict['SEG']: 
+    for j in i: 
+        for k in j: 
+            if k == 1: 
+                print("cancer break")
+                
+np.unique(sub1dict['SEG'])
+sub1dict['SEG'].shape
+viewer.add_labels(sub1dict["SEG"], name="SEG", opacity=0.5)
+viewer.add_image(sub1dict["SUV"], name="SUV")
+viewer.add_image(sub1dict["PET"], name="PET")
+import val_script 
+import pandas as pd
+from visualization import sample_to_dict
+sample_to_dict(124)
+rsamp, lesion = sample_to_dict(124)
+lesion
+import torch 
+import napari 
+import torch.nn as nn 
+model_path = "model3.pt"
+model_dict = torch.load(model_path)
+import unet 
+device = 'cuda'
+
+model = unet.UNet3D(in_channels=2, out_classes=1, dimensions=3, padding=1)
+model = model.to(device)
+model.load_state_dict(model_dict)
+model.eval()
+import torchvision
+import torchio 
+import torchio as tio 
+resize_transform_pet = torchvision.transforms.Compose([
+    tio.transforms.Resize(64, image_interpolation="linear"),
+    tio.transforms.ZNormalization(),
+])
+
+resize_transform_suv = torchvision.transforms.Compose([
+    tio.transforms.Resize(64, image_interpolation="linear"),
+    tio.transforms.ZNormalization(),
+])
+outputs.shape
+seg.max()
+seg.min()
+outputs.unique()
+import torch
+torch.where(outputs>0.5, 1., 0.)
+torch.where(outputs>0.5, 1., 0.).shape
+out = torch.where(outputs>0.5, 1., 0.)
+dice_score(seg,out)
+from torch import load
+net
+net = load('model3.pt')
+new_model = model.load_state_dict(net)
+new_model.state_dict()
+new_model
+model.load_state_dict(net)
+new_out.max()
+new_out.min()
+(seg*new_out).sum()
+dice_score(seg,new_out)
+dice_score(seg[0],new_out[0])
+dice_score(seg[1],new_out[1])
+dice_score(seg[1][0],new_out[1][0])
+seg[1].max()
+new_out[1].max()
+new_out[1].min()
+seg.shape
+sample
+sample[0].shapoe
+sample[0].shape
+pet_suv.shape
+import napari
+napari.viewer()
+viewer.add_labels(seg[0][0].cup().numpy())
+viewer.add_labels(seg[0][0].cpu().numpy())
+new_out = torch.where(new_out>0.5, 1., 0.)
+viewer.add_image(new_out[0][0].cpu().numpy())
+viewer.add_labels(seg[0][0].cpu().numpy().astype('uint8'))
+new_out = model(pet_suv.float())
+new_out[1][0].max()
+new_out = torch.where(new_out>0.1, 1., 0.)
+viewer.add_image(seg[1][0].cpu().numpy())
+viewer.add_image(seg[1][0].cpu().numpy().astype('uint8'))
+viewer = napari.Viewer()
+viewer.add_image(new_out[1][0].cpu().numpy())
+viewer.add_labels(seg[1][0].cpu().numpy().astype('uint8'))
