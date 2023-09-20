@@ -137,4 +137,5 @@ for epoch in range(num_epochs):
     avg_val_loss = val_loss / val_batches
     print(f"Avg Validation Loss: {avg_val_loss:.4f}")
 
-torch.save(model.state_dict(), f="model4.pt")
+torch.save(model.state_dict(), f="model6.pt")
+
