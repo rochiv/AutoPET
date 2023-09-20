@@ -1,4 +1,3 @@
-
 import SimpleITK
 import numpy as np
 

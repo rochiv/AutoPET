@@ -12,130 +12,138 @@ import torchio as tio
 from torch.utils.data import DataLoader
 import unet
 import torch.optim as optim
-from monai.losses import DiceLoss
 from torch.nn import BCEWithLogitsLoss
 
 from val_script import compute_metrics, dice_score
+from transforms import resize_normalize
 
-# Enter path to .csv file
-csv_path = "image_df.csv"
+torch.autograd.set_detect_anomaly(True)
 
-# Enter path to image data directory
-data_dir_path = "/home/rohit/Downloads/nifti/FDG-PET-CT-Lesions"
 
-# Generate image_df.csv if it does not exist
-if os.path.exists(csv_path):
-    print(f".csv path exists, reading {csv_path}.")
-    image_df = pd.read_csv(csv_path)
-else:
-    print(f".csv path does not exist, generating dataframe and creating {csv_path} file.")
-    image_df = generate_image_df(data_dir_path)
-    image_df.to_csv(csv_path, index=False)
+def generate_image_path_df(csv_path: str, data_dir_path: str) -> pd.DataFrame:
+    # Generate image_df.csv if it does not exist
+    if os.path.exists(csv_path):
+        print(f".csv path exists, reading {csv_path}.")
+        image_df = pd.read_csv(csv_path)
+    else:
+        print(f".csv path does not exist, generating dataframe and creating {csv_path} file.")
+        image_df = generate_image_df(data_dir_path)
+        image_df.to_csv(csv_path, index=False)
+    return image_df
 
-# generate train-test split
-train_df, test_df = train_test_split(image_df, test_size=0.2, random_state=42)
 
-# develop transform
-resize_transform_pet = torchvision.transforms.Compose([
-    tio.transforms.Resize(64, image_interpolation="linear"),
-    tio.transforms.ZNormalization(),
-])
+def train(device: str, num_epochs: int, train_loader, test_loader, model, optimizer, loss):
+    for epoch in range(num_epochs):
+        print(f"Epoch [{epoch + 1}/{num_epochs}]")
 
-resize_transform_suv = torchvision.transforms.Compose([
-    tio.transforms.Resize(64, image_interpolation="linear"),
-    tio.transforms.ZNormalization(),
-])
+        enu_tqdm = tqdm(enumerate(train_loader))
+        for batch_idx, sample in enu_tqdm:
+            pet, ctres, suv, seg = sample[0].to(device), sample[1].to(device), sample[2].to(device), sample[3].to(device)
 
-resize_transform_seg = torchvision.transforms.Compose([
-    tio.transforms.Resize(64, image_interpolation="nearest"),
-])
+            pet_ctres_suv = torch.cat((pet, ctres, suv), 1)
 
-# create train set
-train_set = SegmentationDataset(df=train_df,
-                                root_dir=data_dir_path,
-                                transform_pet=resize_transform_pet,
-                                transform_suv=resize_transform_suv,
-                                transform_seg=resize_transform_seg
-                                )
+            batch_start_time = time.time()
 
-test_set = SegmentationDataset(df=test_df,
-                               root_dir=data_dir_path,
-                               transform_pet=resize_transform_pet,
-                               transform_suv=resize_transform_suv,
-                               transform_seg=resize_transform_seg
-                               )
+            # forward pass
+            optimizer.zero_grad()
+            print(pet_ctres_suv.requires_grad)
+            outputs = model(pet_ctres_suv.float())
 
-# create data loaders
-train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4)
-test_loader = DataLoader(test_set, batch_size=4, shuffle=False, num_workers=4)
+            bce_loss = loss(outputs, seg)
+            bce_loss.backward()
 
-print(f"Total batches in train_loader: {len(train_loader)}")
-print(f"Total batches in test_loader: {len(test_loader)}")
+            optimizer.step()
 
-# ----------------------------------------------------------------------------------------------------------------------
+            enu_tqdm.set_description(f"Batch [{batch_idx + 1}/{len(train_loader)}] - BCE: {bce_loss:.4f}")
 
-# TODO: create main function
-# TODO: create separate functions for transform, dataloader
+        # validation
+        model.eval()
+        val_loss = 0.0
+        val_batches = len(test_loader)
 
-device = 'cuda'
+        with torch.no_grad():
+            val_tqdm = tqdm(enumerate(test_loader))
+            for batch_idx, sample in val_tqdm:
+                pet, ctres, suv, seg = sample[0].to(device), sample[1].to(device), sample[2].to(device), sample[3].to(device)
+                pet_ctres_suv = torch.cat((pet, ctres, suv), 1)
 
-model = unet.UNet3D(in_channels=2, out_classes=1, dimensions=3, padding=1)
-model = model.to(device)
+                # Forward pass
+                outputs = model(pet_ctres_suv.float())
 
-learning_rate = 0.001
+                # outputs = torch.where(outputs > 0.5, 1., 0.)
 
-bce_loss_function = BCEWithLogitsLoss()
+                # Calculate loss
+                dice_sc = dice_score(seg, outputs)
+                val_loss += dice_sc.item()
 
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-num_epochs = 10
+                # Update progress bar
+                tqdm.write(f"Val Batch [{batch_idx + 1}/{len(test_loader)}] - Dice Score: {dice_sc:.4f}")
 
-for epoch in range(num_epochs):
-    print(f"Epoch [{epoch + 1}/{num_epochs}]")
+        avg_val_loss = val_loss / val_batches
+        print(f"Avg Validation Loss: {avg_val_loss:.4f}")
 
-    enu_tqdm = tqdm(enumerate(train_loader))
-    for batch_idx, sample in enu_tqdm:
-        pet, suv, seg = sample[0].to(device), sample[1].to(device), sample[2].to(device)
+    torch.save(model.state_dict(), f="model6.pt")
 
-        pet_suv = torch.cat((pet, suv), 1)
 
-        batch_start_time = time.time()
+def main():
+    # path to .csv file
+    csv_path = "image_df.csv"
 
-        # forward pass
-        optimizer.zero_grad()
-        outputs = model(pet_suv.float())
+    # path to image data directory
+    data_dir_path = "/home/rohit/Downloads/nifti/FDG-PET-CT-Lesions"
 
-        bce_loss = bce_loss_function(outputs, seg)
-        bce_loss.backward()
+    image_df = generate_image_path_df(csv_path, data_dir_path)
 
-        optimizer.step()
+    # train-test split
+    train_df, test_df = train_test_split(image_df[:64], test_size=0.2, random_state=42)
 
-        enu_tqdm.set_description(f"Batch [{batch_idx + 1}/{len(train_loader)}] - BCE: {bce_loss:.4f}")
+    # train and test set
+    train_set = SegmentationDataset(df=train_df,
+                                    root_dir=data_dir_path,
+                                    transform_pet=resize_normalize(size=64, component='image'),
+                                    transform_suv=resize_normalize(size=64, component='image'),
+                                    transform_ctres=resize_normalize(size=64, component='image'),
+                                    transform_seg=resize_normalize(size=64, component='mask')
+                                    )
 
-    # validation
-    model.eval()
-    val_loss = 0.0
-    val_batches = len(test_loader)
+    test_set = SegmentationDataset(df=test_df,
+                                   root_dir=data_dir_path,
+                                   transform_pet=resize_normalize(size=64, component='image'),
+                                   transform_suv=resize_normalize(size=64, component='image'),
+                                   transform_ctres=resize_normalize(size=64, component='image'),
+                                   transform_seg=resize_normalize(size=64, component='mask')
+                                   )
 
-    with torch.no_grad():
-        val_tqdm = tqdm(enumerate(test_loader))
-        for batch_idx, sample in val_tqdm:
-            pet, suv, seg = sample[0].to(device), sample[1].to(device), sample[2].to(device)
-            pet_suv = torch.cat((pet, suv), 1)
+    # train and test loaders
+    train_loader = DataLoader(train_set, batch_size=4, shuffle=True, num_workers=4)
+    test_loader = DataLoader(test_set, batch_size=4, shuffle=False, num_workers=4)
 
-            # Forward pass
-            outputs = model(pet_suv.float())
+    print(f"Total batches in train_loader: {len(train_loader)}")
+    print(f"Total batches in test_loader: {len(test_loader)}")
 
-            outputs = torch.where(outputs > 0.5, 1., 0.)
+    device = 'cuda'
 
-            # Calculate loss
-            dice_sc = dice_score(seg, outputs)
-            val_loss += dice_sc.item()
+    # residual 3D UNet model
+    residual_3d_unet = unet.UNet3D(in_channels=3, out_classes=1, dimensions=3, residual=False, padding=1)
+    model = residual_3d_unet.to(device)
 
-            # Update progress bar
-            tqdm.write(f"Val Batch [{batch_idx + 1}/{len(test_loader)}] - Dice Score: {dice_sc:.4f}")
+    # loss function
+    bce_loss_function = BCEWithLogitsLoss()
 
-    avg_val_loss = val_loss / val_batches
-    print(f"Avg Validation Loss: {avg_val_loss:.4f}")
+    # learning rate and optimizer
+    learning_rate = 0.001
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-torch.save(model.state_dict(), f="model6.pt")
+    train(
+        device='cuda',
+        num_epochs=10,
+        train_loader=train_loader,
+        test_loader=test_loader,
+        model=model,
+        optimizer=optimizer,
+        loss=bce_loss_function
+    )
 
+
+if __name__ == "__main__":
+    main()
